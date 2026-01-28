@@ -76,7 +76,6 @@ VITE_DEV_USER_ID=100200300
 
 ## Деплой
 
-- **Web**: Vercel (build `apps/web`) — API URL в `VITE_API_URL`.
-- **API**: Railway/Render — перенесите `.env`, включите SQLite storage.
+- **Vercel (web + serverless API)**: в корне есть `vercel.json`, используется `npm run vercel-build`, а API публикуется как Serverless Function из `/api/index.ts`. Укажите переменные окружения для API в настройках проекта.
+- **Альтернатива**: Web на Vercel, API на Railway/Render — перенесите `.env`, включите SQLite storage.
 - Prisma миграции: `npm run prisma:migrate`.
-
