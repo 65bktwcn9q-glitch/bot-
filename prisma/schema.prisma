@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id               String           @id
+  uiLanguage       String           @default("ru")
+  learningLanguage String           @default("de")
+  levelDe          String           @default("A1")
+  levelEn          String           @default("A1")
+  focus            String           @default("travel")
+  onboarded        Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  lessons          LessonSession[]
+  payments         Payment[]
+  subscription     Subscription?
+  assistantMessages AssistantMessage[]
+}
+
+model LessonSession {
+  id               String      @id @default(uuid())
+  userId           String
+  learningLanguage String
+  startedAt        DateTime    @default(now())
+  completedAt      DateTime?
+  score            Int         @default(0)
+  tasks            LessonTask[]
+  user             User        @relation(fields: [userId], references: [id])
+}
+
+model LessonTask {
+  id                 String   @id @default(uuid())
+  sessionId          String
+  type               String
+  prompt             String
+  options            String?
+  answer             String
+  explanationLearn   String
+  explanationUi      String
+  hint               String
+  tags               String
+  userAnswer         String?
+  correct            Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  session            LessonSession @relation(fields: [sessionId], references: [id])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  userId    String
+  provider  String
+  plan      String
+  amount    Int
+  currency  String
+  status    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  plan      String
+  status    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model AssistantMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Ad {
+  id    String @id @default(uuid())
+  title String
+  body  String
+  cta   String
+}
