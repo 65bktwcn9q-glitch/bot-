@@ -1,12 +1,13 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { z } from 'zod';
 import fetch from 'node-fetch';
-import { PrismaClient, type User } from '@prisma/client';
+import { PrismaClient, type AssistantMessage, type LessonSession, type LessonTask, type User } from '@prisma/client';
 
 dotenv.config();
 
@@ -97,7 +98,7 @@ const aiLimiter = rateLimit({
   message: 'Too many AI requests'
 });
 
-  app.post('/api/auth/telegram', async (req, res) => {
+  app.post('/api/auth/telegram', async (req: Request, res: Response) => {
   const parsed = authSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -163,7 +164,7 @@ const computeLessonsToday = async (userId: string) => {
   return prisma.lessonSession.count({ where: { userId, startedAt: { gte: today } } });
 };
 
-  app.get('/api/me', authMiddleware, async (req, res) => {
+  app.get('/api/me', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
@@ -190,7 +191,7 @@ const computeLessonsToday = async (userId: string) => {
   });
   });
 
-  app.post('/api/profile', authMiddleware, async (req, res) => {
+  app.post('/api/profile', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -204,7 +205,7 @@ const computeLessonsToday = async (userId: string) => {
   res.json({ success: true, user });
   });
 
-  app.post('/api/focus', authMiddleware, async (req, res) => {
+  app.post('/api/focus', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const parsed = focusSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -404,7 +405,7 @@ const getTask = async (user: { learningLanguage: string; level: string; focus: s
 const getCurrentLevel = (user: User) =>
   user.learningLanguage === 'de' ? user.levelDe : user.levelEn;
 
-  app.post('/api/lesson/start', authMiddleware, async (req, res) => {
+  app.post('/api/lesson/start', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
@@ -454,22 +455,22 @@ const getCurrentLevel = (user: User) =>
   res.json({ sessionId: session.id, task: tasks[0], completed: false });
   });
 
-  app.post('/api/lesson/nextTask', authMiddleware, async (req, res) => {
+  app.post('/api/lesson/nextTask', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const parsed = lessonNextSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const session = await prisma.lessonSession.findUnique({
+  const session = (await prisma.lessonSession.findUnique({
     where: { id: parsed.data.sessionId },
     include: { tasks: { orderBy: { createdAt: 'asc' } } }
-  });
+  })) as (LessonSession & { tasks: LessonTask[] }) | null;
   if (!session || session.userId !== userId) {
     res.status(404).send('Session not found');
     return;
   }
-  const nextTask = session.tasks.find((task) => !task.userAnswer);
+  const nextTask = session.tasks.find((task: LessonTask) => !task.userAnswer);
   if (!nextTask) {
     await prisma.lessonSession.update({
       where: { id: session.id },
@@ -496,7 +497,7 @@ const getCurrentLevel = (user: User) =>
   });
   });
 
-  app.post('/api/lesson/answer', authMiddleware, async (req, res) => {
+  app.post('/api/lesson/answer', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const parsed = lessonAnswerSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -544,14 +545,14 @@ const getCurrentLevel = (user: User) =>
   });
   });
 
-  app.get('/api/ads', authMiddleware, async (_req, res) => {
+  app.get('/api/ads', authMiddleware, async (_req: Request, res: Response) => {
   const ads = await prisma.ad.findMany();
   res.json(ads);
   });
 
-  app.get('/api/assistant/history', authMiddleware, async (req, res) => {
+  app.get('/api/assistant/history', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
-  const messages = await prisma.assistantMessage.findMany({
+  const messages: AssistantMessage[] = await prisma.assistantMessage.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
     take: 10
@@ -559,11 +560,11 @@ const getCurrentLevel = (user: User) =>
   res.json(
     messages
       .reverse()
-      .map((msg) => ({ id: msg.id, role: msg.role, content: msg.content }))
+      .map((msg: AssistantMessage) => ({ id: msg.id, role: msg.role, content: msg.content }))
   );
   });
 
-  app.post('/api/assistant/ask', authMiddleware, aiLimiter, async (req, res) => {
+  app.post('/api/assistant/ask', authMiddleware, aiLimiter, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const parsed = assistantAskSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -601,21 +602,21 @@ const getCurrentLevel = (user: User) =>
     data: { userId, role: 'assistant', content: replyContent }
   });
 
-  const oldMessages = await prisma.assistantMessage.findMany({
+  const oldMessages: AssistantMessage[] = await prisma.assistantMessage.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
     skip: 10
   });
   if (oldMessages.length > 0) {
     await prisma.assistantMessage.deleteMany({
-      where: { id: { in: oldMessages.map((msg) => msg.id) } }
+      where: { id: { in: oldMessages.map((msg: AssistantMessage) => msg.id) } }
     });
   }
 
   res.json({ reply: { id: reply.id, role: reply.role, content: reply.content } });
   });
 
-  app.post('/api/payments/test', authMiddleware, async (req, res) => {
+  app.post('/api/payments/test', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const parsed = paymentTestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -650,7 +651,7 @@ const getCurrentLevel = (user: User) =>
   res.json({ success: true });
   });
 
-  app.get('/api/payments', authMiddleware, async (req, res) => {
+  app.get('/api/payments', authMiddleware, async (req: Request, res: Response) => {
   const userId = (req as express.Request & { userId: string }).userId;
   const payments = await prisma.payment.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
   res.json(payments);
