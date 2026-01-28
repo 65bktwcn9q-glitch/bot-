@@ -355,7 +355,11 @@ const buildPrompt = (user: { learningLanguage: string; level: string; focus: str
   return `Generate a language learning task in JSON format. learningLanguage=${user.learningLanguage}, level=${user.level}, focus=${user.focus}. Provide one task.`;
 };
 
-const requestDeepSeekTask = async (user: { learningLanguage: 'de' | 'en'; level: string; focus: string }) => {
+const normalizeLearningLanguage = (learningLanguage: string): 'de' | 'en' =>
+  learningLanguage === 'en' ? 'en' : 'de';
+
+const requestDeepSeekTask = async (user: { learningLanguage: string; level: string; focus: string }) => {
+  const learningLanguage = normalizeLearningLanguage(user.learningLanguage);
   if (!DEEPSEEK_API_KEY) return null;
   const payload = {
     model: 'deepseek-chat',
@@ -365,7 +369,7 @@ const requestDeepSeekTask = async (user: { learningLanguage: 'de' | 'en'; level:
         content:
           'Return ONLY valid JSON that matches the schema: {"id":"uuid","learningLanguage":"de|en","type":"multiple_choice|fill_blank|short_translation|mini_dialog","prompt":"string","options":["string"]?,"answer":"string","explanation_learn_lang":"string","explanation_ui":"string","hint":"string","tags":["string"]}. No extra text.'
       },
-      { role: 'user', content: buildPrompt(user) }
+      { role: 'user', content: buildPrompt({ ...user, learningLanguage }) }
     ]
   };
   const response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -388,16 +392,14 @@ const requestDeepSeekTask = async (user: { learningLanguage: 'de' | 'en'; level:
   return result.data;
 };
 
-const getTask = async (user: { learningLanguage: 'de' | 'en'; level: string; focus: string }) => {
-  const task = await requestDeepSeekTask(user);
+const getTask = async (user: { learningLanguage: string; level: string; focus: string }) => {
+  const learningLanguage = normalizeLearningLanguage(user.learningLanguage);
+  const task = await requestDeepSeekTask({ ...user, learningLanguage });
   if (task) return task;
-  const options = localTaskTemplates[user.learningLanguage];
+  const options = localTaskTemplates[learningLanguage];
   const next = options[Math.floor(Math.random() * options.length)];
   return { ...next, id: crypto.randomUUID() };
 };
-
-const normalizeLearningLanguage = (learningLanguage: string): 'de' | 'en' =>
-  learningLanguage === 'en' ? 'en' : 'de';
 
 const getCurrentLevel = (user: User) =>
   user.learningLanguage === 'de' ? user.levelDe : user.levelEn;
@@ -427,7 +429,7 @@ app.post('/api/lesson/start', authMiddleware, async (req, res) => {
   const tasks: TaskInput[] = [];
   for (let i = 0; i < 5; i += 1) {
     const task = await getTask({
-      learningLanguage: normalizeLearningLanguage(user.learningLanguage),
+      learningLanguage: user.learningLanguage,
       level: getCurrentLevel(user),
       focus: user.focus
     });
